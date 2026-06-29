@@ -86,7 +86,7 @@ __Default__: `false`<br>
 ⚠️ _So to have it said, be aware of the danger that secrets stored in local storage pose._
 
 ### Base Path
-The angular application wrapper supports dynamic base path configuration at runtime to enable the use of 
+The angular application wrapper supports dynamic base path configuration at runtime to enable the use of
 container images in deployment scenarios where the dashboard is not running at root level but some sub path.
 To configure a base path, add a file to the deployment environment at `public/config/APP_BASE_HREF.txt` with just the path and nothing else, e.g.:
 ```text
@@ -102,6 +102,30 @@ The dashboard will be available at `http://localhost:8080`
 
 ```shell
 docker run -p 8080:8080 -v $PWD/public/config/:/app/config -v $PWD/nginx.conf:/etc/nginx/conf.d/default.conf ghcr.io/eclipse-edc/data-dashboard:latest
+```
+
+## Build Docker image
+
+### Multi-arch build (linux/amd64 + linux/arm64)
+
+Requires [Docker Buildx](https://docs.docker.com/build/buildx/) and a builder with multi-platform support.
+
+```shell
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  --tag ghcr.io/eclipse-edc/data-dashboard:latest \
+  --push \
+  .
+```
+
+To load the image locally instead of pushing to a registry, use `--load` (only works for a single platform):
+
+```shell
+docker buildx build \
+  --platform linux/amd64 \
+  --tag ghcr.io/eclipse-edc/data-dashboard:latest \
+  --load \
+  .
 ```
 
 ## Angular dev server

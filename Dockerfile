@@ -1,36 +1,40 @@
-#
-#  Copyright (c) 2025 Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V.
-#
-#  This program and the accompanying materials are made available under the
-#  terms of the Apache License, Version 2.0 which is available at
-#  https://www.apache.org/licenses/LICENSE-2.0
-#
-#  SPDX-License-Identifier: Apache-2.0
-#
-#  Contributors:
-#       Fraunhofer-Gesellschaft zur Förderung der angewandten Forschung e.V. - initial API and implementation
-#
-
-# Stage 1: Build the Angular application
-FROM node:22-alpine AS builder
-
-WORKDIR /app
-
-# Copy package files and install dependencies
+# Stage 1: Build frontend
+FROM node:24-alpine AS frontend
+WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci
-
-# Copy the full project and build it
 COPY . .
-RUN npm run lib-build -- --configuration production && npm run build -- --configuration production
+RUN npm run lib-build -- --configuration production \
+ && npm run build -- --configuration production
 
 
-# Stage 2: Serve the app with Nginx
-FROM nginxinc/nginx-unprivileged:1.27.4-alpine3.21-slim
+# Stage 2: Build backend (compile TypeScript)
+FROM node:24-alpine AS backend-build
+RUN npm install -g pnpm@10
+WORKDIR /build
+COPY backend/package.json backend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY backend/ .
+RUN pnpm build
 
-COPY --from=builder /app/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist/data-dashboard/browser /app
+
+# Stage 3: Production runtime
+FROM node:24-alpine AS production
+RUN npm install -g pnpm@10
+WORKDIR /app
+
+# Production dependencies only
+COPY --from=backend-build /build/package.json /build/pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
+
+# Compiled backend — process.cwd() = /app, so node dist/server.js works from here
+COPY --from=backend-build /build/dist ./dist
+
+# Config YAML — process.cwd()/config = /app/config
+COPY --from=backend-build /build/config/application.default.yaml ./config/application.default.yaml
+
+# Frontend build — process.cwd()/static = /app/static
+COPY --from=frontend /º/dist/data-dashboard/browser ./static
 
 EXPOSE 8080
-
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "dist/server.js"]

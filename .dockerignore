@@ -1,5 +1,7 @@
 # Node dependencies (already installed inside the container)
 node_modules
+backend/node_modules
+config/application.yaml
 
 # public directory
 public/config

@@ -1,0 +1,62 @@
+server:
+  port: 8080
+  staticPath: ./static
+  trustProxy: 1
+  # publicUrl: https://my-server.com  # set this to skip header-based detection
+  proxyTimeout: 10000
+  jsonBodyLimit: 100kb
+  storage:
+    destFolder: files
+    maxSizeMB: 5
+  cors:
+    origin: "*"
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    allowedHeaders:
+      - Content-Type
+      - Authorization
+      - X-Organization
+    credentials: true
+    optionsSuccessStatus: 204
+    maxAge: 600
+
+logging:
+  level: info
+
+connectors:
+  consumer:
+    name: Consumer
+    managementUrl:
+      url: http://localhost:8085/api/v1/management
+      proxy: true
+    defaultUrl:
+      url: http://localhost:8080
+      proxy: true
+    protocolUrl:
+      url: http://localhost:8084/protocol
+      proxy: false
+    federatedCatalogEnable: false
+    federatedCatalogUrl:
+      url: http://localhost:8085/api/v1/federatedcatalog
+      proxy: true
+    did: did:web:localhost%3A8085
+  provider:
+    name: Provider
+    managementUrl:
+      url: http://producer-fdsc-edc-dcp.producer.svc.cluster.local:8085/management
+      proxy: true
+    defaultUrl:
+      url: http://producer-fdsc-edc-dcp.producer.svc.cluster.local:8080
+      proxy: true
+    protocolUrl:
+      url: http://producer-fdsc-edc-dcp.producer.svc.cluster.local:8084/protocol
+      proxy: false
+    federatedCatalogEnable: false
+    federatedCatalogUrl:
+      url: http://producer-fdsc-edc-dcp.producer.svc.cluster.local:8085/api/v1/federatedcatalog
+      proxy: true
+    did: did:web:producer-fdsc-edc-dcp.producer.svc.cluster.local%3A8085
