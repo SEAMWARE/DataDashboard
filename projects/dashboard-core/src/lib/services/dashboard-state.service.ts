@@ -185,6 +185,13 @@ export class DashboardStateService implements OnDestroy {
    * @param {EdcConfig} config - The configuration object to set as the current EDC configuration.
    * @return {void} This method does not return a value.
    */
+  public get currentConnectorId(): string | undefined {
+    const config = this._currentEdcConfig.getValue();
+    if (!config) return undefined;
+    if (config.id) return config.id;
+    return config.managementUrl?.match(/\/api\/([^/]+)\/management/)?.[1];
+  }
+
   public setCurrentEdcConfig(config: EdcConfig): void {
     this.edc.setDashboardClient(config);
     this.setFederatedCatalogEnabled(config.federatedCatalogUrl !== undefined && config.federatedCatalogEnabled);

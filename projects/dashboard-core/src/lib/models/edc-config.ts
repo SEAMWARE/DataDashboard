@@ -13,6 +13,7 @@
  */
 
 export interface EdcConfig {
+  id?: string;
   connectorName: string;
   managementUrl: string;
   defaultUrl: string;

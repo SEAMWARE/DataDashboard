@@ -155,9 +155,12 @@ export class ContractAndTransferService {
     if (!edr) {
       throw new Error('No EDR found for transfer ID ' + transferId);
     }
-    return this.http.get(edr.mandatoryValue<string>('edc', 'endpoint'), {
+    const endpoint = edr.mandatoryValue<string>('edc', 'endpoint');
+    const token = edr.mandatoryValue<string>('edc', 'authorization');
+
+    return this.http.get(endpoint, {
       headers: {
-        Authorization: edr.mandatoryValue<string>('edc', 'authorization'),
+        Authorization: token,
       },
       responseType: 'blob',
       reportProgress: true,
