@@ -48,7 +48,7 @@ async function handleEdrDownload(req: Request, res: Response, connector: Connect
   const edr = await edrRes.json() as Record<string, unknown>;
   const endpoint = extractEdrField(edr, 'endpoint');
   const authorization = extractEdrField(edr, 'authorization');
-  const isBearer = extractEdrField(edr, 'tokenType') === 'bearer';
+  const isBearer = extractEdrField(edr, 'authType') === 'bearer';
   const tokenHeader = isBearer ? normalizeBearer(authorization) : authorization;
   if (!endpoint) {
     logger.error(`EDR for transfer ${transferId} has no endpoint field`);

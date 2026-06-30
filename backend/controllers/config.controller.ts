@@ -5,7 +5,7 @@ import type { ConnectorUrlConfig } from '../services/config.service.js';
 import { configService } from '../services/config.service.js';
 import { CONNECTOR_SUBPATHS } from './proxy.controller.js';
 
-const STATIC_CONFIG_DIR = join(process.cwd(), 'static/config');
+const STATIC_CONFIG_DIR = join(process.cwd(), 'config');
 
 // When trust proxy is enabled Express resolves X-Forwarded-Proto into req.protocol
 // and X-Forwarded-Host into req.hostname. We reconstruct the full origin from those.
