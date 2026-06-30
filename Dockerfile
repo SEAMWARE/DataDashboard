@@ -34,7 +34,7 @@ COPY --from=backend-build /build/dist ./dist
 COPY --from=backend-build /build/config/application.default.yaml ./config/application.default.yaml
 
 # Frontend build — process.cwd()/static = /app/static
-COPY --from=frontend /º/dist/data-dashboard/browser ./static
+COPY --from=frontend /build/dist/data-dashboard/browser ./static
 
 EXPOSE 8080
 CMD ["node", "dist/server.js"]
