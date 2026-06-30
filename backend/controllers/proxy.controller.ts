@@ -25,6 +25,10 @@ function extractEdrField(edr: Record<string, unknown>, field: string): string | 
   return (edr[field] ?? edr[`edc:${field}`] ?? edr[`${EDC_NS}${field}`]) as string | undefined;
 }
 
+function normalizeBearer(token: string | undefined): string | undefined {
+  return token?.toLowerCase().startsWith('bearer') ? token : `Bearer ${token}`;
+}
+
 async function handleEdrDownload(req: Request, res: Response, connector: ConnectorConfig, transferId: string): Promise<void> {
   const managementUrl = (connector.managementUrl as ConnectorUrlConfig | undefined)?.url;
   if (!managementUrl) {
@@ -44,7 +48,8 @@ async function handleEdrDownload(req: Request, res: Response, connector: Connect
   const edr = await edrRes.json() as Record<string, unknown>;
   const endpoint = extractEdrField(edr, 'endpoint');
   const authorization = extractEdrField(edr, 'authorization');
-
+  const isBearer = extractEdrField(edr, 'tokenType') === 'bearer';
+  const tokenHeader = isBearer ? normalizeBearer(authorization) : authorization;
   if (!endpoint) {
     logger.error(`EDR for transfer ${transferId} has no endpoint field`);
     res.status(502).json({ error: 'EDR missing endpoint field' });
@@ -58,7 +63,7 @@ async function handleEdrDownload(req: Request, res: Response, connector: Connect
 
   const start = process.hrtime();
   const dataRes = await fetch(targetUrl.toString(), {
-    headers: authorization ? { Authorization: authorization } : {},
+    headers: authorization ? { Authorization: tokenHeader! } : {},
   });
   externalRequest({ status: dataRes.status }, targetUrl.toString(), 'GET', start);
 
