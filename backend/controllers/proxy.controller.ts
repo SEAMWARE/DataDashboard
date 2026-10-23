@@ -15,6 +15,9 @@ export const CONNECTOR_SUBPATHS: ReadonlyArray<{ subPath: string; urlField: keyo
   { subPath: 'federatedcatalog', urlField: 'federatedCatalogUrl' },
 ];
 
+// `Response` is Express's in this file, so name fetch's own return type explicitly.
+type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+
 interface ReqData { start: [number, number]; url: string }
 const reqData = new WeakMap<IncomingMessage, ReqData>();
 
@@ -55,6 +58,44 @@ function normalizeBearer(token: string | undefined): string | undefined {
   return token?.toLowerCase().startsWith('bearer') ? token : `Bearer ${token}`;
 }
 
+/**
+ * GETs the data endpoint, trying both ways of presenting the EDR token.
+ *
+ * There is no reliable signal for which one a provider wants. EDC's own data plane public API
+ * reads `Authorization` as the raw token, while a gateway-fronted data plane - APISIX with the
+ * OIDC plugin in `bearer_only` mode, for instance - requires the `Bearer` scheme. `authType`
+ * does not tell them apart: a provider can declare `bearer` and still reject the prefix with
+ * `403 {"errors":["Failed to decode token"]}`, which is what sent us chasing the wrong problem.
+ *
+ * So the raw token is tried first, as that is what EDC itself expects, and the prefixed form is
+ * retried only on 401/403. The request is a GET, so a second attempt is free of side effects.
+ */
+async function pullWithTokenFallback(
+  url: string,
+  baseHeaders: Record<string, string>,
+  authorization: string | undefined,
+  tokenHeader: string | undefined,
+): Promise<FetchResponse> {
+  const candidates = authorization
+    ? [...new Set([authorization, tokenHeader].filter((t): t is string => !!t))]
+    : [undefined];
+
+  let response!: FetchResponse;
+  for (const [index, token] of candidates.entries()) {
+    const headers = token ? { ...baseHeaders, Authorization: token } : { ...baseHeaders };
+    const start = process.hrtime();
+    response = await fetch(url, { headers });
+    externalRequest({ status: response.status }, url, 'GET', start);
+
+    const retryable = response.status === 401 || response.status === 403;
+    if (!retryable || index === candidates.length - 1) return response;
+
+    logger.warn(`Data pull rejected with ${response.status}; retrying with the other Authorization form`);
+    await response.body?.cancel();
+  }
+  return response;
+}
+
 async function handleEdrDownload(req: Request, res: Response, connector: ConnectorConfig, transferId: string): Promise<void> {
   const managementUrl = (connector.managementUrl as ConnectorUrlConfig | undefined)?.url;
   if (!managementUrl) {
@@ -89,13 +130,10 @@ async function handleEdrDownload(req: Request, res: Response, connector: Connect
 
   const contractId = await fetchContractAgreementId(managementUrl, transferId);
 
-  const headers: Record<string, string> = {};
-  if (authorization) headers.Authorization = tokenHeader!;
-  if (contractId) headers['Contract-Id'] = contractId;
+  const baseHeaders: Record<string, string> = {};
+  if (contractId) baseHeaders['Contract-Id'] = contractId;
 
-  const start = process.hrtime();
-  const dataRes = await fetch(targetUrl.toString(), { headers });
-  externalRequest({ status: dataRes.status }, targetUrl.toString(), 'GET', start);
+  const dataRes = await pullWithTokenFallback(targetUrl.toString(), baseHeaders, authorization, tokenHeader);
 
   res.status(dataRes.status);
   dataRes.headers.forEach((value, key) => {
