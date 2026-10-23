@@ -21,8 +21,34 @@ const reqData = new WeakMap<IncomingMessage, ReqData>();
 const EDC_NS = 'https://w3id.org/edc/v0.0.1/ns/';
 const SKIP_HEADERS = new Set(['content-encoding', 'transfer-encoding', 'connection']);
 
-function extractEdrField(edr: Record<string, unknown>, field: string): string | undefined {
-  return (edr[field] ?? edr[`edc:${field}`] ?? edr[`${EDC_NS}${field}`]) as string | undefined;
+function extractField(source: Record<string, unknown>, field: string): string | undefined {
+  return (source[field] ?? source[`edc:${field}`] ?? source[`${EDC_NS}${field}`]) as string | undefined;
+}
+
+/**
+ * The id of the contract agreement the transfer was started from, read off the transfer process.
+ *
+ * Some provider data planes require it as a `Contract-Id` header on every pull, on top of the
+ * EDR token, and fail before authorization when it is missing - one such implementation answers
+ * a bare `HTTP 500 Request failed.` with or without the token, which is indistinguishable from
+ * the provider being down. It is not carried in the EDR, so it has to be fetched separately.
+ * Providers that do not expect the header ignore it, so it is always sent.
+ *
+ * A failure here is not fatal: the pull is attempted without the header, exactly as before.
+ */
+async function fetchContractAgreementId(managementUrl: string, transferId: string): Promise<string | undefined> {
+  const url = `${managementUrl}/v3/transferprocesses/${encodeURIComponent(transferId)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    logger.warn(`Transfer process fetch failed [${transferId}]: ${res.status} - pulling without Contract-Id`);
+    return undefined;
+  }
+  const transferProcess = await res.json() as Record<string, unknown>;
+  const contractId = extractField(transferProcess, 'contractId');
+  if (!contractId) {
+    logger.warn(`Transfer process ${transferId} has no contractId - pulling without Contract-Id`);
+  }
+  return contractId;
 }
 
 function normalizeBearer(token: string | undefined): string | undefined {
@@ -46,9 +72,9 @@ async function handleEdrDownload(req: Request, res: Response, connector: Connect
   }
 
   const edr = await edrRes.json() as Record<string, unknown>;
-  const endpoint = extractEdrField(edr, 'endpoint');
-  const authorization = extractEdrField(edr, 'authorization');
-  const isBearer = extractEdrField(edr, 'authType') === 'bearer';
+  const endpoint = extractField(edr, 'endpoint');
+  const authorization = extractField(edr, 'authorization');
+  const isBearer = extractField(edr, 'authType') === 'bearer';
   const tokenHeader = isBearer ? normalizeBearer(authorization) : authorization;
   if (!endpoint) {
     logger.error(`EDR for transfer ${transferId} has no endpoint field`);
@@ -61,10 +87,14 @@ async function handleEdrDownload(req: Request, res: Response, connector: Connect
     targetUrl.searchParams.set(key, String(value));
   }
 
+  const contractId = await fetchContractAgreementId(managementUrl, transferId);
+
+  const headers: Record<string, string> = {};
+  if (authorization) headers.Authorization = tokenHeader!;
+  if (contractId) headers['Contract-Id'] = contractId;
+
   const start = process.hrtime();
-  const dataRes = await fetch(targetUrl.toString(), {
-    headers: authorization ? { Authorization: tokenHeader! } : {},
-  });
+  const dataRes = await fetch(targetUrl.toString(), { headers });
   externalRequest({ status: dataRes.status }, targetUrl.toString(), 'GET', start);
 
   res.status(dataRes.status);
